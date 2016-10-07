@@ -1,0 +1,1121 @@
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
+
+using System.Collections.Generic; // List<>
+using System;                     // Random
+
+namespace Morf_M
+{
+    /// <summary>
+    /// This is the main type for your game.
+    /// </summary>
+    /// 
+
+    public class World
+    {
+
+        
+
+        // инициализация рисунков
+        public static Texture2D BL;                        // back layer
+        public static Texture2D All_items_texture;         // рисунки хп, фаерболов и т.д.
+
+        public static int WindowW = 800,    // размер окна Х
+                          WindowH = 565;    // размер окна Y
+        Vector2 Perf = new Vector2(WindowW, WindowH);
+        public static int Y_ground = WindowH - 39;           // уровень земли
+        public static int Y_min = Y_ground - 25;             // нижний уровень отрисовки морфа 50-половина изображения морфа
+        public static int X_Left_min = 25;
+        public static int X_Right_max = WindowW - 20 - 50;
+
+        // константы
+        int FB_velocity = 250;    // скорость фаербола
+        int FB_max_count = 3;   // максимальное количество фаерболов
+        public float FB_delay = 0.2f;  // задержка между выстрелами
+
+
+
+        // счет
+        public int Score = 0;
+        public SpriteFont SFont1;
+        public Vector2 SF_pos = new Vector2(395, 12);
+
+        public int GameOver = 0;
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////___________World_MORF__________///////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // создаем сущность Морфа
+        public Morf My_Morf = new Morf();
+
+        public class Morf
+        {
+            public Texture2D Morf_texture;   // рисунок с ГГ
+            public Vector2 Position;         // текущие координаты   
+            public Vector2 speed;            // скорость перемещения по Х и по У (константы, кроме Vy Морфа)
+            public int V_init_Y;             // начальная скорость Морфа по оси Y
+            public float V_prev;             // предыдущая скорость
+            public int stop;                 // (у Морфа: 1= прыжок, у топора и сердца 1= стоп)
+            public float Axel;               // ускорение (у Морфа в прыжке)
+            // для отрисовки:
+            public Rectangle M_current;      // текущий, который надо отрисовать
+            public Rectangle M_Right;        // texture rectengular   
+            public Rectangle M_Left;
+            public Rectangle M_Straght;
+            public Rectangle M_UP;
+            public int M_up_left;           // флаг инвертирования в полете (хвост исправляет)
+
+            // создаем прямоугольнички для определения взаимодействий
+            public BoundingBox BBoxMorf;
+
+            public void Draw(SpriteBatch spriteBatch)
+            {
+
+                SpriteEffects SE = new SpriteEffects();
+                if (stop == 0)
+                    SE = SpriteEffects.None;
+                if (stop == 1)
+                    SE = SpriteEffects.FlipHorizontally;
+                
+                spriteBatch.Draw(Morf_texture,                  // ссылка на текстуру для отрисовки
+                    Position,                                   // позиция, где отрисовывать
+                    M_current,                                  // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                    Color.White,                                // цвет
+                    0f,                                         // угол поворота
+                    new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                    0.5f,                                       // коэфициент масштабирования
+                    SE,                                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                    1f);                                        // уровень слоя
+                    /*
+                spriteBatch.Draw(Morf_texture,                  // ссылка на текстуру для отрисовки
+                    new Vector2 ( BBoxMorf.Min.X, BBoxMorf.Min.Y ) ,                                   // позиция, где отрисовывать
+                    M_current,                                  // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                    Color.White,                                // цвет
+                    0f,                                         // угол поворота
+                    new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                    0.5f,                                       // коэфициент масштабирования
+                    SE,                                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                    1f);                                        // уровень слоя
+                    */
+            }
+
+            public void init_states()   // инициализация начальных параметров для Морфа
+            {
+                Position = new Vector2();
+                speed = new Vector2(250, 250);
+                V_init_Y = 250;
+                V_prev = 0;
+                stop = 0;
+                Axel = 350f;
+
+                M_Straght = new Rectangle(2, 2, 98, 98);  // выбираем соответствующие квадратики текстур
+                M_Right = new Rectangle(104, 2, 98, 98);
+                M_Left = new Rectangle(205, 2, 98, 98);
+                M_UP = new Rectangle(306, 2, 98, 98);
+                M_up_left = 0;
+
+                M_current = M_Straght; // начальное положение - пярмое
+            }
+
+            public float Get_Next_Coord_M(KeyboardState Kss, float dTime)
+            {
+
+                M_current = M_Straght; // задаем стандартное положение и изменим его если оно не такое
+
+                if ((Kss.IsKeyDown(Keys.Left)) && (Position.X > X_Left_min))
+                {
+                    Position.X -= speed.X * dTime;
+                    BBoxMorf.Min.X -= speed.X * dTime;
+                    BBoxMorf.Max.X -= speed.X * dTime;
+                    M_current = M_Left;
+                    stop = 0;
+
+                    if (Position.Y < Y_min)  // если управляем в полете
+                        stop = 1;
+                }
+
+
+                if ((Kss.IsKeyDown(Keys.Right)) && (Position.X < X_Right_max))
+                {
+                    Position.X += speed.X * dTime;
+                    BBoxMorf.Min.X += speed.X * dTime;
+                    BBoxMorf.Max.X += speed.X * dTime;
+                    M_current = M_Right;
+                    stop = 0;
+
+                    if (Position.Y < Y_min)
+                        stop = 0;
+                }
+
+                // если пробел только нажали, меняем Y
+                if (Kss.IsKeyDown(Keys.Space) && (Position.Y == Y_min))
+                {
+                    Position.Y -= 1;                 // чуточку взлетаем (дальше это отлавливаем)
+                    BBoxMorf.Min.Y -= 1;
+                    BBoxMorf.Max.Y -= 1;
+                    speed.Y = V_init_Y;              // стартуем с начальной скоростью
+                }
+
+                // если пробел был раньше нажат и мы в воздухе -> считаем высоту
+                if (Position.Y < Y_min)
+                {
+                    M_current = M_UP;        // если выше земли, то летим
+
+                    speed.Y = V_prev - Axel * dTime;
+                    Position.Y = Position.Y - speed.Y * dTime + Axel * dTime * dTime * 0.5f;
+                    BBoxMorf.Min.Y = BBoxMorf.Min.Y - speed.Y * dTime + Axel * dTime * dTime * 0.5f;
+                    BBoxMorf.Max.Y = BBoxMorf.Max.Y - speed.Y * dTime + Axel * dTime * dTime * 0.5f;
+                    V_prev = speed.Y;
+
+                    if (Position.Y > Y_min)
+                    {
+                        Position.Y = Y_min;
+                        BBoxMorf.Min.Y = Position.Y + 15;
+                        BBoxMorf.Max.Y = Position.Y + 50;
+                        V_prev = V_init_Y;
+                    }
+                }
+
+                return V_prev;
+            }
+
+        }
+
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////______World_Items__________///////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // Вводим списки всех сущностей!
+
+        // создаем списки(мир) всех сущностей
+        public List<Items> HP_ent = new List<Items>();      // kind 1 - ХПшки
+        public List<Items> FB_ent = new List<Items>();      // kind 2 - летящие фаерболы
+        public List<Items> FB_ent_am = new List<Items>();   // заряды - фаерболы
+        public List<Items> Birds = new List<Items>();       // kind 3 - птички
+        public List<Items> A_and_F = new List<Items>();     // kind 4 и kind 5 - топоры и рыбки. они здесь находятся в таком же порядке,
+                                                            // как и соответствующие им птички в Birds
+        public List<Items> Clouds = new List<Items>();      // kind 6 - Облакааа белокрылые лошааадки
+        
+
+
+        public int fb_item_count = 0;               // количество фаерболов (летящих)
+        public int fb_am_item_count = 0;            // количество зарядов - фаерболов
+        public int hp_item_count = 0;               // количество ХПшек
+        public int Time_flag = 0;                   // счетчик времени (между запусками фаерболов), мс
+        public int cloud_count = 0;                 // счетчик облаков
+        public int birds_counter = 0;               // счетчик птиц
+        public int axes_counter = 0;                // счетчик топоров
+        public int fishes_counter = 0;              // счетчик рыб
+
+        public Random rnd = new Random(); 
+  
+
+        public class Items  // сущности: хп, фаербол, чайка, рыба, топор, облако
+        {
+            public Texture2D Items_texture;             // рисунок со всеми сущностями
+
+            public BoundingBox ItemBBox;
+
+            public int kind;                            // 1- хп, 2- фаербол, 3- чайка, 4- рыба, 5- топор, 6- облако
+            public Vector2 Position;                    // текущие координаты   
+            //public Vector2 Position_prev;             // предыдущие координаты
+            public Vector2 speed;                       // скорость перемещения по Х и по У (константы, кроме Vy Морфа)
+            public int stop;                            // (у Морфа: 1= прыжок, у топора, фаербола и рыбы 1= стоп)
+            public float Time_counter;                  // счетчик времени
+
+            // для отрисовки:
+            public Rectangle Item_hp;                    // текущий, который надо отрисовать
+            public Rectangle Item_FireBall;              // texture rectengular   
+            public Rectangle Item_Cloud;                 // 
+            public Rectangle Item_Bird_1;
+            public Rectangle Item_Bird_2;
+            public Rectangle Item_Axe;
+            public Rectangle Item_Fish;
+
+        }
+
+        public void create_item(int obj_kind)   // инициализирует элемент в начальном состоянии
+        {
+            if (obj_kind == 1)        // иниц ХПшки
+            {
+                HP_ent.Insert(hp_item_count, new Morf_M.World.Items());
+                HP_ent[hp_item_count].Position = new Vector2(770, 5 + hp_item_count * 30);
+                HP_ent[hp_item_count].Item_hp = new Rectangle(52, 104, 48, 48);
+                HP_ent[hp_item_count].speed = new Vector2(0, 0);
+                HP_ent[hp_item_count].stop = 1;         
+                HP_ent[hp_item_count].kind = obj_kind;
+
+                hp_item_count++;
+            }
+
+            if ((obj_kind == 2) && (fb_am_item_count < FB_max_count))        // иниц фаерболы если их меньше N существует
+            {
+
+                FB_ent_am.Insert(fb_am_item_count, new Morf_M.World.Items());
+                FB_ent_am[fb_am_item_count].Position = new Vector2(5, 30 + fb_am_item_count * 30);
+                //FB_ent[fb_item_count].Position = new Vector2(My_Morf.Position.X + 35, My_Morf.Position.Y + 15);
+                FB_ent_am[fb_am_item_count].Item_FireBall = new Rectangle(2, 104, 48, 46);
+                FB_ent_am[fb_am_item_count].speed = new Vector2(0, 0);
+                FB_ent_am[fb_am_item_count].stop = 0;
+                FB_ent_am[fb_am_item_count].kind = obj_kind;
+                fb_am_item_count++;
+                // создаем кубики взаимодействия
+            }
+
+            // создается топор или рыбку сразу с птичкой, привязка по идексу
+            if ( obj_kind == 4 || obj_kind == 5 ) 
+            {
+                // случайное число от -1 до 1
+                float Vel_X = 2 * (float)rnd.NextDouble() - 1;
+
+                int XN = 0;
+                int sign = 0;
+                if (Vel_X > 0)
+                {
+                    XN = -50;
+                    sign = 1;
+                }
+                else
+                {
+                    XN = 750;
+                    sign = -1;
+                }
+
+                Birds.Insert(birds_counter, new Morf_M.World.Items());
+                
+                if (obj_kind == 4)
+                    A_and_F.Insert(birds_counter, new Morf_M.World.Items());
+                if (obj_kind == 5)
+                    A_and_F.Insert(birds_counter, new Morf_M.World.Items());
+                
+                float X_rand = 800 * (float)rnd.NextDouble();
+                float Y_rand = 20 + 150 * (float)rnd.NextDouble();
+
+
+                Birds[birds_counter].Item_Bird_1 = new Rectangle(2, 2, 96, 96);
+                Birds[birds_counter].speed = new Vector2(10 * Vel_X + 20 * sign, 0);
+                if (Birds[birds_counter].speed.X < 0)
+                    Birds[birds_counter].Position = new Vector2(X_rand - 65, Y_rand);
+                else Birds[birds_counter].Position = new Vector2(X_rand, Y_rand);
+                Birds[birds_counter].stop = 0;
+                Birds[birds_counter].kind = 3;
+                Birds[birds_counter].Time_counter = (float)rnd.NextDouble()* (float)rnd.NextDouble();
+                
+                if ( Birds[birds_counter].speed.X > 0 )
+                    Birds[birds_counter].ItemBBox = new BoundingBox(
+                            new Vector3(/*Birds[birds_counter].Position.X*/X_rand + 30,
+                            /*Birds[fb_item_count].Position.Y*/ Y_rand, 0),
+                            new Vector3(/*Birds[birds_counter].Position.X*/X_rand + 100,
+                            /*Birds[birds_counter].Position.Y*/Y_rand + 100, 0));
+
+                if (Birds[birds_counter].speed.X < 0)
+                    Birds[birds_counter].ItemBBox = new BoundingBox(
+                            new Vector3(/*Birds[birds_counter].Position.X*/X_rand - 25,
+                            /*Birds[fb_item_count].Position.Y*/ Y_rand, 0),
+                            new Vector3(/*Birds[birds_counter].Position.X*/X_rand + 45 ,
+                            /*Birds[birds_counter].Position.Y*/Y_rand + 65, 0));
+
+
+                if (obj_kind == 5)
+                {
+                    A_and_F[birds_counter].Position = new Vector2(X_rand, Y_rand + 40);
+                    A_and_F[birds_counter].Item_Axe = new Rectangle(104, 104, 46, 46);
+                    A_and_F[birds_counter].speed = new Vector2(10 * Vel_X + 20 * sign, 0);
+                    A_and_F[birds_counter].stop = 0;
+                    A_and_F[birds_counter].kind = obj_kind;
+                    A_and_F[birds_counter].Time_counter = 0;
+
+                }
+                if (obj_kind == 4)
+                {
+                    A_and_F[birds_counter].Position = new Vector2(X_rand, Y_rand + 43);
+                    A_and_F[birds_counter].Item_Fish = new Rectangle(156, 104, 46, 46);
+                    A_and_F[birds_counter].speed = new Vector2(10 * Vel_X + 20 * sign, 0);
+                    A_and_F[birds_counter].stop = 0;
+                    A_and_F[birds_counter].kind = obj_kind;
+                    A_and_F[birds_counter].Time_counter = 0;
+
+                }
+
+                A_and_F[birds_counter].ItemBBox = new BoundingBox(
+                    new Vector3(/*A_and_F[birds_counter].Position.X*/X_rand + 10,
+                    /*A_and_F[birds_counter].Position.Y + 10*/ Y_rand + 40, 0),
+                    new Vector3(/*A_and_F[birds_counter].Position.X*/X_rand + 40 ,
+                    /*A_and_F[birds_counter].Position.Y + 50*/ Y_rand + 90, 0));
+
+                birds_counter++;
+                /*
+                if ( obj_kind == 4 )
+                    axes_counter++;
+                if (obj_kind == 5)
+                    fishes_counter++;
+                */
+            }
+            
+
+            if (obj_kind == 6 )             // облачка
+            {
+                // случайное число от -1-0.5 до 0.5-1
+                float Vel_X = 2 * (float)rnd.NextDouble() - 1;
+
+                int XN = 0;
+                int sign = 0;
+                if (Vel_X > 0)
+                {
+                    XN = -100;
+                    sign = 1;
+                }
+                else
+                {
+                    XN = 800;
+                    sign = -1;
+                }
+
+                Clouds.Insert(cloud_count, new Morf_M.World.Items());
+                Clouds[cloud_count].Position = new Vector2( 800*(float)rnd.NextDouble(), 20 + 150*(float)rnd.NextDouble());
+                Clouds[cloud_count].Item_Cloud = new Rectangle(206, 2, 96, 96);
+                Clouds[cloud_count].speed = new Vector2(10 * Vel_X + 10 * sign, 0);
+                Clouds[cloud_count].stop = 0;
+                Clouds[cloud_count].kind = obj_kind;
+            }
+
+
+        }
+
+
+        public void Item_Spawn (int obj_kind)
+        {
+
+            if ( (obj_kind == 2) && (fb_item_count < FB_max_count ) )        // иниц фаерболы если их меньше 6 существует
+            {
+                
+                FB_ent.Insert(fb_item_count, new Morf_M.World.Items());
+                //FB_ent[fb_item_num].Position = new Vector2(5, 30 + (fb_item_num - 1) * 30);
+                FB_ent[fb_item_count].Position = new Vector2( My_Morf.Position.X + 35, My_Morf.Position.Y + 15);
+                FB_ent[fb_item_count].Item_FireBall = new Rectangle(2, 104, 48, 46);
+                FB_ent[fb_item_count].speed = new Vector2(0, FB_velocity);
+                FB_ent[fb_item_count].stop = 0;
+                FB_ent[fb_item_count].kind = obj_kind;
+
+                // при выстреле надо снять заряд с доски аммуниции
+                for (int i = 0; i < fb_am_item_count; i++)
+                    FB_ent_am.RemoveAt(0);
+                int buff = fb_am_item_count-1;
+                fb_am_item_count = 0;
+                
+                for (int i = 0; i < buff; i++)
+                    create_item(2);
+
+                // создаем прямоугольник взамодействия
+                FB_ent[fb_item_count].ItemBBox =  new BoundingBox ( 
+                                        new Vector3(FB_ent[fb_item_count].Position.X,
+                                        FB_ent[fb_item_count].Position.Y, 0),
+                                        new Vector3(FB_ent[fb_item_count].Position.X+25,
+                                        FB_ent[fb_item_count].Position.Y+25, 0) );
+
+                fb_item_count++;
+            }
+
+
+            if (obj_kind == 4 || obj_kind == 5) // создается топор или рыбку сразу с птичкой, привязка по идексу
+            {
+                // случайное число от -1 до 1
+                float Vel_X = 2 * (float)rnd.NextDouble() - 1;
+
+                int XN = 0;
+                int sign = 0;
+                if (Vel_X > 0)
+                {
+                    XN = -150;
+                    sign = 1;
+                }
+                else
+                {
+                    XN = 850;
+                    sign = -1;
+                }
+
+                Birds.Insert(birds_counter, new Morf_M.World.Items());
+                
+                if (obj_kind == 4)
+                    A_and_F.Insert(birds_counter, new Morf_M.World.Items());
+                else if (obj_kind == 5)
+                    A_and_F.Insert(birds_counter, new Morf_M.World.Items());
+                
+                float Y_rand = 20 + 150 * (float)rnd.NextDouble();
+
+
+                Birds[birds_counter].Item_Bird_1 = new Rectangle(2, 2, 96, 96);
+                Birds[birds_counter].speed = new Vector2(20 * Vel_X + 30 * sign, 0);
+                if (Birds[birds_counter].speed.X < 0)
+                    Birds[birds_counter].Position = new Vector2(XN - 65, Y_rand);
+                else Birds[birds_counter].Position = new Vector2(XN, Y_rand);
+                Birds[birds_counter].stop = 0;
+                Birds[birds_counter].kind = 3;
+                Birds[birds_counter].Time_counter = (float)rnd.NextDouble() * (float)rnd.NextDouble();
+
+
+                if (Birds[birds_counter].speed.X > 0)
+                    Birds[birds_counter].ItemBBox = new BoundingBox(
+                            new Vector3(/*Birds[birds_counter].Position.X*/XN + 30,
+                            /*Birds[fb_item_count].Position.Y*/ Y_rand, 0),
+                            new Vector3(/*Birds[birds_counter].Position.X*/XN + 100,
+                            /*Birds[birds_counter].Position.Y*/Y_rand + 100, 0));
+
+                if (Birds[birds_counter].speed.X < 0)
+                    Birds[birds_counter].ItemBBox = new BoundingBox(
+                            new Vector3(/*Birds[birds_counter].Position.X*/XN - 25,
+                            /*Birds[fb_item_count].Position.Y*/ Y_rand, 0),
+                            new Vector3(/*Birds[birds_counter].Position.X*/XN + 45,
+                            /*Birds[birds_counter].Position.Y*/Y_rand + 65, 0));
+
+                if (obj_kind == 5)
+                {
+                    A_and_F[birds_counter].Position = new Vector2(XN, Y_rand + 40);
+                    A_and_F[birds_counter].Item_Axe = new Rectangle(104, 104, 46, 46);
+                    A_and_F[birds_counter].speed = new Vector2(20 * Vel_X + 30 * sign, 0);
+                    A_and_F[birds_counter].stop = 0;
+                    A_and_F[birds_counter].kind = obj_kind;
+                    A_and_F[birds_counter].Time_counter = 0;
+
+                }
+                if (obj_kind == 4)
+                {
+                    A_and_F[birds_counter].Position = new Vector2(XN, Y_rand + 43);
+                    A_and_F[birds_counter].Item_Fish = new Rectangle(156, 104, 46, 46);
+                    A_and_F[birds_counter].speed = new Vector2(20 * Vel_X + 30 * sign, 0);
+                    A_and_F[birds_counter].stop = 0;
+                    A_and_F[birds_counter].kind = obj_kind;
+                    A_and_F[birds_counter].Time_counter = 0;
+                }
+
+                A_and_F[birds_counter].ItemBBox = new BoundingBox(
+                    new Vector3(/*A_and_F[birds_counter].Position.X*/XN + 10,
+                    /*A_and_F[birds_counter].Position.Y + 10*/ Y_rand + 40, 0),
+                    new Vector3(/*A_and_F[birds_counter].Position.X*/XN + 40,
+                    /*A_and_F[birds_counter].Position.Y + 50*/ Y_rand + 90, 0));
+
+                birds_counter++;
+                /*
+                if (obj_kind == 4)
+                    axes_counter++;
+                if (obj_kind == 5)
+                    fishes_counter++;
+                    */
+            }
+
+
+
+            if (obj_kind == 6)  // облачка
+            {
+                // случайное число от -1-0.5 до 0.5-1
+                float Vel_X = 2 * (float)rnd.NextDouble() - 1;
+
+                int XN = 0;
+                int sign = 0;
+                if (Vel_X > 0)
+                {
+                    XN = -100;
+                    sign = 1;
+                }
+                else
+                {
+                    XN = 800;
+                    sign = -1;
+                }
+
+                Clouds.Insert(cloud_count, new Morf_M.World.Items());
+                Clouds[cloud_count].Position = new Vector2( XN, 150*(float)rnd.NextDouble());
+                Clouds[cloud_count].Item_Cloud = new Rectangle(206, 2, 96, 96);
+                Clouds[cloud_count].speed = new Vector2(20 * Vel_X + 30 * sign, 0);
+                Clouds[cloud_count].stop = 0;
+                Clouds[cloud_count].kind = obj_kind;
+
+                cloud_count++;
+            }
+
+
+        }
+
+        public void Item_next_state ( float dTime )
+        {
+            // проверим что изменилось.
+            Interacts();
+
+            // kind = 2 = фаербол /////////////////////
+            {
+                int k = 0;
+                int num = -1;
+                foreach (Items FB in FB_ent) // ищем вышедший за пределы поля и передвигаем 
+                {
+                    if (FB.stop == 0)
+                    {
+                        FB.Position.Y -= FB.speed.Y * dTime; // передвигаем все фаерболы вперед
+                        FB.ItemBBox.Min.Y -= FB.speed.Y * dTime; // передвигаем все прямоугольники взаимодействия фаерболов вперед
+                        FB.ItemBBox.Max.Y -= FB.speed.Y * dTime; // передвигаем все прямоугольники взаимодействия фаерболов вперед
+                        if (FB.Position.Y < 0)               // нашли
+                            num = k;
+                        k++;
+                    }
+                }
+                if (num != (-1))
+                {
+                    fb_item_count--;
+                    FB_ent.RemoveAt(num);  // и удаляем
+                    create_item(2);
+                }
+            }
+            /////////////////////////////////////////// облака
+            {
+                int k6 = 0;
+                int num6 = -1;
+                foreach (Items Cloud in Clouds) // ищем вышедший за пределы поля и передвигаем 
+                {
+                    Cloud.Position.X += Cloud.speed.X * dTime; // передвигаем все вперед
+                    if (Cloud.Position.X < -100 || Cloud.Position.X > 800)               // нашли
+                        num6 = k6;
+                    k6++;
+
+                }
+                if (num6 != (-1))
+                {
+                    
+                    Clouds.RemoveAt(num6);  // и удаляем
+                    cloud_count = num6;
+                    Item_Spawn(6);
+                }
+
+            }
+
+            ////////// чайки и подарки
+            {
+                int i = 0;
+                int num = -1;
+                foreach (Items Bird in Birds)
+                {
+                    Bird.Position.X += Bird.speed.X * dTime; // передвигаем всех чаек вперед
+                    Bird.ItemBBox.Min.X += Bird.speed.X * dTime;
+                    Bird.ItemBBox.Max.X += Bird.speed.X * dTime;
+                    if (Bird.Position.X < -150 || Bird.Position.X > 850)               // нашли
+                    {
+                        num = i;
+                        break;
+                    }
+                    i++;
+                }
+
+                foreach (Items AF in A_and_F)
+                {
+                    AF.Position.X += AF.speed.X * dTime;   // передвигаем все топоры т рыбы
+                    AF.ItemBBox.Min.X += AF.speed.X * dTime;
+                    AF.ItemBBox.Max.X += AF.speed.X * dTime;
+                    int k = 0;
+                    if (AF.kind == 4)
+                        k = 15;
+
+                    if (AF.Position.Y < (Y_min + 5 + k))
+                    {
+                        AF.Position.Y += AF.speed.Y * dTime;   // передвигаем все топоры и рыбы
+                        AF.ItemBBox.Min.Y += AF.speed.Y * dTime;
+                        AF.ItemBBox.Max.Y += AF.speed.Y * dTime;
+                    }
+                }
+
+                if (num != (-1))
+                {
+                    Birds.RemoveAt(num);  // и удаляем
+                    birds_counter = num;
+
+                    if (A_and_F[num].kind == 4)
+                    {
+                        A_and_F.RemoveAt(num);
+                        Item_Spawn(4);
+                    }
+                    if (A_and_F[num].kind == 5)
+                    {
+                        A_and_F.RemoveAt(num);
+                        Item_Spawn(5);
+                    }
+
+                }
+
+            }
+
+        }
+        /// <summary>
+        /// ////////////////////////////// взамодействия ////////////////////////////////////////////
+        /// </summary>
+        public void Interacts ()
+        {
+            // фаерболов и чаек ( чайка должна отпустить предмет ( у предмета меняется скорость с коорд Х на коорд У)
+
+            int k = 0;
+            foreach ( Items FB in FB_ent )
+            {
+                k = 0;
+                foreach (Items Bird in Birds)
+                {
+                    if ( Bird.ItemBBox.Intersects(FB.ItemBBox) )
+                    {
+                        if (A_and_F[k].speed.Y != 250)
+                            A_and_F[k].speed.X = A_and_F[k].speed.X / 250;
+                        A_and_F[k].speed.Y = 250;
+                    }
+                    k++;
+                }
+            }
+
+            k = 0;
+            foreach ( Items AF in A_and_F )
+            {
+                if ( AF.ItemBBox.Intersects(My_Morf.BBoxMorf))
+                {
+                    if ( AF.kind == 4 ) // рыбы вроде
+                    {
+                        Score += 100;
+                        AF.ItemBBox.Min.X = 1000;
+                        AF.ItemBBox.Max.X = 1010;
+                        AF.Position.X = 1000;
+
+                    }
+
+                    if ( AF.kind == 5 ) // встретился с топором
+                    {
+                        hp_item_count--;
+                        HP_ent.RemoveAt(hp_item_count);
+
+                        if (hp_item_count == 0)
+                            GameOver = 1;
+
+                        AF.ItemBBox.Min.X = 1000;
+                        AF.ItemBBox.Max.X = 1010;
+                        AF.Position.X = 1000;
+
+                    }
+                    
+                }
+                k++;
+            }
+
+        }
+
+        public void Draw_Items(SpriteBatch spriteBatch)
+        {
+
+
+            
+
+            foreach (Morf_M.World.Items Cloud in Clouds)
+            {
+                spriteBatch.Draw(World.All_items_texture,           // ссылка на текстуру для отрисовки
+                        Cloud.Position,                             // позиция, где отрисовывать
+                        Cloud.Item_Cloud,                           // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0f, 0f),                        // позиция относительно которой будет происходить вращение и масш
+                        1f,                                         // коэфициент масштабирования
+                        SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        0.5f);                                      // уровень слоя
+            }
+
+            // отрисовка птичек c рыбками
+            int i = 0;
+            int X_offset = 0;
+            SpriteEffects SP = new SpriteEffects();
+            foreach (Morf_M.World.Items Fish in A_and_F)
+            //foreach (Morf_M.World.Items Bird in Birds)
+            {
+                if (Fish.kind == 4) // рыбы же
+                {
+                    X_offset = 0;
+                    if (Fish.speed.X > 0)
+                        X_offset = -70;
+                    
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        new Vector2(Fish.Position.X /*+ X_offset*/, Fish.Position.Y),// позиция, где отрисовывать
+                        Fish.Item_Fish,                             // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        0.7f,                                         // коэфициент масштабирования
+                        SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+                    /*
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        new Vector2(Fish.ItemBBox.Min.X + X_offset, Fish.ItemBBox.Min.Y),// позиция, где отрисовывать
+                        Fish.Item_Fish,                             // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        0.7f,                                         // коэфициент масштабирования
+                        SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+                    */
+                    if (A_and_F[i].speed.X > 0)
+                        SP = SpriteEffects.FlipHorizontally;
+                    else SP = SpriteEffects.None;
+                    
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        Birds[i].Position,                          // позиция, где отрисовывать
+                        Birds[i].Item_Bird_1,                       // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        1f,                                         // коэфициент масштабирования
+                        SP,                                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+                    /*
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                            new Vector2(Birds[i].ItemBBox.Min.X, Birds[i].ItemBBox.Min.Y),                          // позиция, где отрисовывать
+                            Birds[i].Item_Bird_1,                       // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                            Color.White,                                // цвет
+                            0f,                                         // угол поворота
+                            new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                            1f,                                         // коэфициент масштабирования
+                            SP,                                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                            1f);                                        // уровень слоя
+                    */
+                }
+                i++;
+            }
+            
+            // отрисовка топоров с птичками
+            X_offset = 0;
+            i = 0;
+            
+            foreach (Morf_M.World.Items Axe in A_and_F)
+            {
+                if (Axe.kind == 5) // топоры же
+                {
+                    X_offset = 0;
+                    if (Axe.speed.X > 0)
+                        X_offset = -60;
+                    
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        new Vector2(Axe.Position.X /*+ X_offset*/, Axe.Position.Y),// позиция, где отрисовывать
+                        Axe.Item_Axe,                               // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        1f,                                         // коэфициент масштабирования
+                        SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+                    /*
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        new Vector2(Axe.ItemBBox.Min.X , Axe.ItemBBox.Min.Y),// позиция, где отрисовывать
+                        Axe.Item_Axe,                               // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        1f,                                         // коэфициент масштабирования
+                        SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);
+                    */
+                    if (A_and_F[i].speed.X > 0)
+                        SP = SpriteEffects.FlipHorizontally;
+                    else SP = SpriteEffects.None;
+                    
+                    spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                        Birds[i].Position,                          // позиция, где отрисовывать
+                        Birds[i].Item_Bird_1,                       // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        0f,                                         // угол поворота
+                        new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                        1f,                                         // коэфициент масштабирования
+                        SP,                                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+                    
+                }
+                i++;
+            }
+            
+            // отрисовка ХП
+            foreach (Morf_M.World.Items HP in HP_ent)
+            {
+                spriteBatch.Draw(World.All_items_texture,       // ссылка на текстуру для отрисовки
+                    HP.Position,                                // позиция, где отрисовывать
+                    HP.Item_hp,                                 // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                    Color.White,                                // цвет
+                    0f,                                         // угол поворота
+                    new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                    0.5f,                                       // коэфициент масштабирования
+                    SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                    1f);                                        // уровень слоя
+            }
+           
+            // отрисовка Фаерболов
+            foreach (Morf_M.World.Items FB in FB_ent)
+            {
+                spriteBatch.Draw(World.All_items_texture,           // ссылка на текстуру для отрисовки
+                        FB.Position,                                // позиция, где отрисовывать
+                        FB.Item_FireBall,                           // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        3.14f,//4.71f,                              // угол поворота
+                        new Vector2(0f, 0f),                        // позиция относительно которой будет происходить вращение и масш
+                        0.5f,                                       // коэфициент масштабирования
+                        SpriteEffects.FlipVertically,               // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+            }
+
+            foreach (Morf_M.World.Items FB in FB_ent_am)
+            {
+                spriteBatch.Draw(World.All_items_texture,           // ссылка на текстуру для отрисовки
+                        FB.Position,                                // позиция, где отрисовывать
+                        FB.Item_FireBall,                           // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                        Color.White,                                // цвет
+                        4.71f,                                      // угол поворота
+                        new Vector2(0f, 0f),                        // позиция относительно которой будет происходить вращение и масш
+                        0.5f,                                       // коэфициент масштабирования
+                        SpriteEffects.FlipVertically,               // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                        1f);                                        // уровень слоя
+            }
+
+        }
+    }
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////___________Game__________///////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        public class Game1 : Game
+    {
+        GraphicsDeviceManager graphics;
+        SpriteBatch spriteBatch;
+
+        Texture2D GameCore;
+
+        // Создаем наш МИР !!!
+        World My_World = new World();
+
+        
+        
+        public float FB_dTime;         // счетчик времени между запусками фаерболов
+        /// <summary>
+        /// 
+        /// </summary>
+        public Game1()
+        {
+            graphics = new GraphicsDeviceManager(this);
+            Content.RootDirectory = "Content";
+
+        }
+
+        /// <summary>
+        /// Allows the game to perform any initialization it needs to before starting to run.
+        /// This is where it can query for any required services and load any non-graphic
+        /// related content.  Calling base.Initialize will enumerate through any components
+        /// and initialize them as well.
+        /// </summary>
+        protected override void Initialize()
+        {
+            // TODO: Add your initialization logic here
+
+            IsMouseVisible = true;
+            // window position settings
+            graphics.PreferredBackBufferWidth = 800;
+            graphics.PreferredBackBufferHeight = 565;
+            //this.Window.Position = new Point(0,0);
+            graphics.ApplyChanges();
+
+            // фон загружаем
+            World.BL = Content.Load<Texture2D>("Layer 1");
+            World.All_items_texture = Content.Load<Texture2D>("all_items");
+            GameCore = Content.Load<Texture2D>("GameCoreGO");
+            
+
+            // Init all about Morfic
+            //public Morf My_Morf = new Morf_M.Morf();               // создаем сущность Морфа // выше перенес
+            My_World.My_Morf.init_states();                                   // начальное состояние задаем
+            My_World.My_Morf.Position = new Vector2(World.WindowW / 2 - 25, World.Y_min); // начальные координаты Морфа
+            My_World.My_Morf.Morf_texture = Content.Load<Texture2D>("Morf");
+            My_World.My_Morf.BBoxMorf = new BoundingBox(new Vector3(My_World.My_Morf.Position.X + 10, // для взаимодействия
+                                    My_World.My_Morf.Position.Y + 15, 0), 
+                                    new Vector3(My_World.My_Morf.Position.X + 40,
+                                    My_World.My_Morf.Position.Y + 50, 0));
+
+            My_World.Score = 0;
+            My_World.SFont1 = Content.Load<SpriteFont>("Font");
+
+
+            // рисуем ХП 5 раз
+            My_World.create_item(1);
+            My_World.create_item(1);
+            My_World.create_item(1);
+            My_World.create_item(1);
+            My_World.create_item(1);
+            // инициализация 3х выстрелов
+            My_World.create_item(2);
+            My_World.create_item(2);
+            My_World.create_item(2);
+            // создание 7b облаков
+            
+            My_World.create_item(6);
+            My_World.create_item(6);
+            My_World.create_item(6);
+            My_World.create_item(6);
+            My_World.create_item(6);
+            My_World.create_item(6);
+            My_World.create_item(6);
+
+            // создадим 5 птичек с топорами
+            My_World.create_item(4);
+            My_World.create_item(4);
+            My_World.create_item(4);
+            My_World.create_item(4);
+            My_World.create_item(4);
+
+            // создадим 3 птичек с рыбками
+            My_World.create_item(5);
+            My_World.create_item(5);
+            My_World.create_item(5);
+            My_World.create_item(5);
+            My_World.create_item(5);
+
+
+            // Init HP
+            /*
+            Morf_M.World.Items HP1 = new World.Items();    // создаем локальную переменную сущности
+            HP1.init_item(1, 5);                          // инициализируем ее как ХП
+            My_World.HP_ent.Insert(0, HP1);                // помещаем в список ХПшек
+            Morf_M.World.Items HP2 = new World.Items();
+            HP2.init_item(1, 4);
+            My_World.HP_ent.Add(HP2);
+            Morf_M.World.Items HP3 = new World.Items();
+            HP3.init_item(1, 3);
+            My_World.HP_ent.Add(HP3);
+            Morf_M.World.Items HP4 = new World.Items();
+            HP4.init_item(1, 2);
+            My_World.HP_ent.Add(HP4);
+            Morf_M.World.Items HP5 = new World.Items();
+            HP5.init_item(1, 1);
+            My_World.HP_ent.Add(HP5);
+            */
+            // Init FB
+            FB_dTime = 0;
+            /*
+            for (int i = 0; i < 7; i++)                 // создаем набор сущностей типа этой локальной перемнной
+            {
+                FB_ent.Insert(i, new Morf_M.World.Items());
+                FB_ent[i].spawn_item(2, i);
+            }
+            */
+            base.Initialize();
+        }
+
+        /// <summary>
+        /// LoadContent will be called once per game and is the place to load
+        /// all of your content.
+        /// </summary>
+        protected override void LoadContent()
+        {
+            // Create a new SpriteBatch, which can be used to draw textures.
+            spriteBatch = new SpriteBatch(GraphicsDevice);
+
+            // TODO: use this.Content to load your game content here
+        }
+
+        /// <summary>
+        /// UnloadContent will be called once per game and is the place to unload
+        /// game-specific content.
+        /// </summary>
+        protected override void UnloadContent()
+        {
+            // TODO: Unload any non ContentManager content here
+        }
+
+        /// <summary>
+        /// Allows the game to run logic such as updating the world,
+        /// checking for collisions, gathering input, and playing audio.
+        /// </summary>
+        /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        protected override void Update(GameTime gameTime)
+        {
+            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
+                Exit();
+
+            // найдем прошедшее с пред кадра время
+            float dTime = (float)gameTime.ElapsedGameTime.TotalMilliseconds / 1000f;
+            FB_dTime += dTime;          // плюсуем ко времени между стрелянием
+
+            // TODO: Add your update logic here
+            KeyboardState Ks = Keyboard.GetState(); // получаем состояние клавы
+            // стрелям если нажимаем пробел в полете 
+            if (Ks.IsKeyDown(Keys.Space) && (FB_dTime > My_World.FB_delay))
+            {
+                FB_dTime = 0;
+                if (My_World.My_Morf.Position.Y < World.Y_min)
+                {
+                    My_World.Item_Spawn(2);
+                }
+            }
+            My_World.My_Morf.V_prev = My_World.My_Morf.Get_Next_Coord_M(Ks, dTime); // двигаем Морфа
+
+
+            // получаем следующие состояния:
+            My_World.Item_next_state( dTime );
+
+            
+
+
+                base.Update(gameTime);
+        }
+
+        /// <summary>
+        /// This is called when the game should draw itself.
+        /// </summary>
+        /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        protected override void Draw(GameTime gameTime)
+        {
+            GraphicsDevice.Clear(Color.CornflowerBlue);
+
+            // TODO: Add your drawing code here
+
+            
+                spriteBatch.Begin();
+
+            if (My_World.GameOver == 0)
+            {
+
+                spriteBatch.Draw(World.BL,                            // ссылка на текстуру для отрисовки
+                    new Vector2(0, 0),                          // позиция, где отрисовывать
+                    new Rectangle(0, 0, World.BL.Width, World.BL.Height),   // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                    Color.White,                                // цвет
+                    0f,                                         // угол поворота
+                    new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                    0.747f,                                     // коэфициент масштабирования
+                    SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                    0f);                                        // уровень слоя
+
+
+                My_World.My_Morf.Draw(spriteBatch);
+
+                My_World.Draw_Items(spriteBatch);
+
+                spriteBatch.DrawString(My_World.SFont1, My_World.Score.ToString(), My_World.SF_pos, Color.Black);
+
+            }
+            else
+            {
+                spriteBatch.Draw(GameCore,                            // ссылка на текстуру для отрисовки
+                    new Vector2(-30, -10),                          // позиция, где отрисовывать
+                    new Rectangle(0, 0, GameCore.Width, GameCore.Height),   // SourceRectangle. Какой участок из текстуры будем отрисовывать. Полезно, когда у вас "атлас текстур".
+                    Color.White,                                // цвет
+                    0f,                                         // угол поворота
+                    new Vector2(0, 0),                          // позиция относительно которой будет происходить вращение и масш
+                    0.55f,                                     // коэфициент масштабирования
+                    SpriteEffects.None,                         // отражение по оси X и Y, SpriteEffects.None означает, что нет отражения
+                    0f);                                        // уровень слоя
+
+
+
+
+            }
+            spriteBatch.End();
+            
+
+
+
+            base.Draw(gameTime);
+        }
+    }
+}
